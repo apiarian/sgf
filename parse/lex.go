@@ -1,3 +1,5 @@
+package parse
+
 /*
 This lexer was inspired by https://www.youtube.com/watch?v=HxaD_trXwRE and
 adapted from
@@ -7,12 +9,7 @@ The lexer probably does more work than strictly necessary, especially the
 lexProperty method. ¯\_(ツ)_/¯
 */
 
-package parse
-
 import "fmt"
-
-// Pos is a position within a buffer
-type Pos int
 
 type item struct {
 	typ itemType
@@ -176,7 +173,7 @@ func lexOpenParen(l *lexer) stateFn {
 func lexCloseParen(l *lexer) stateFn {
 	l.treeDepth--
 	if l.treeDepth < 0 {
-		return l.errorf("too many right parentheses")
+		return l.errorf("lex: too many right parentheses")
 	}
 	l.emit(itemCloseParen)
 	if l.treeDepth > 0 {
@@ -199,7 +196,7 @@ func lexTree(l *lexer) stateFn {
 		case ')':
 			return lexCloseParen
 		case eof:
-			return l.errorf("unexpected EOF")
+			return l.errorf("lex: unexpected EOF; expected GameTree contents or ')'")
 		default:
 			l.ignore()
 		}
@@ -236,16 +233,22 @@ IdentLoop:
 		n := l.next()
 		switch {
 		case n == eof:
-			return l.errorf("unexpected EOF")
+			return l.errorf("lex: unexpected EOF; expected PropertyIdent")
+		case n == ';':
+			if semiColonWidth := l.pos - l.start; semiColonWidth == 1 {
+				return lexSemiColon
+			} else {
+				return l.errorf("lex: unexpected ';'; expected PropertyIdent")
+			}
 		case n == '[':
 			l.backup()
 			break IdentLoop
 		case n < 'A' || n > 'Z':
-			return l.errorf("PropertyIdent must be upper-case letters")
+			return l.errorf("lex: PropertyIdent must be upper-case letters")
 		}
 	}
 	if identWidth := l.pos - l.start; identWidth > 2 {
-		l.emitWarning("Found PropertyIdent wider than 2 characters")
+		l.emitWarning("lex: Found PropertyIdent wider than 2 characters")
 	}
 	l.emit(itemPropertyIdent)
 	_ = l.next()
@@ -256,7 +259,7 @@ ValueLoop:
 		n := l.next()
 		switch {
 		case n == eof:
-			return l.errorf("unexpected EOF")
+			return l.errorf("lex: unexpected EOF; expected PropertyValue")
 		case n == '\\':
 			_ = l.next()
 		case n == ']':

@@ -2,6 +2,7 @@ package parse
 
 import (
 	"fmt"
+	"io/ioutil"
 	"testing"
 	"time"
 )
@@ -114,7 +115,7 @@ func TestLexer(t *testing.T) {
 			sgf:  "(",
 			exp: []expectedItem{
 				{item{typ: itemOpenParen, val: dontcare}, true},
-				{item{typ: itemError, val: []byte("unexpected EOF")}, false},
+				{item{typ: itemError, val: []byte("lex: unexpected EOF; expected GameTree contents or ')'")}, false},
 			},
 		},
 		{
@@ -123,7 +124,7 @@ func TestLexer(t *testing.T) {
 			exp: []expectedItem{
 				{item{typ: itemOpenParen, val: dontcare}, true},
 				{item{typ: itemCloseParen, val: dontcare}, true},
-				{item{typ: itemError, val: []byte("too many right parentheses")}, false},
+				{item{typ: itemError, val: []byte("lex: too many right parentheses")}, false},
 			},
 		},
 		{
@@ -146,7 +147,7 @@ func TestLexer(t *testing.T) {
 				{item{typ: itemPropertyValue, val: []byte("hello [world\\] 世界")}, false},
 				{item{typ: itemCloseBracket, val: dontcare}, true},
 				{item{typ: itemSemiColon, val: dontcare}, true},
-				{item{typ: itemWarning, val: []byte("Found PropertyIdent wider than 2 characters")}, false},
+				{item{typ: itemWarning, val: []byte("lex: Found PropertyIdent wider than 2 characters")}, false},
 				{item{typ: itemPropertyIdent, val: []byte("DEF")}, false},
 				{item{typ: itemOpenBracket, val: dontcare}, true},
 				{item{typ: itemPropertyValue, val: []byte{}}, false},
@@ -161,7 +162,7 @@ func TestLexer(t *testing.T) {
 			exp: []expectedItem{
 				{item{typ: itemOpenParen, val: dontcare}, true},
 				{item{typ: itemSemiColon, val: dontcare}, true},
-				{item{typ: itemError, val: []byte("PropertyIdent must be upper-case letters")}, false},
+				{item{typ: itemError, val: []byte("lex: PropertyIdent must be upper-case letters")}, false},
 			},
 		},
 		{
@@ -170,7 +171,7 @@ func TestLexer(t *testing.T) {
 			exp: []expectedItem{
 				{item{typ: itemOpenParen, val: dontcare}, true},
 				{item{typ: itemSemiColon, val: dontcare}, true},
-				{item{typ: itemError, val: []byte("unexpected EOF")}, false},
+				{item{typ: itemError, val: []byte("lex: unexpected EOF; expected PropertyIdent")}, false},
 			},
 		},
 		{
@@ -181,7 +182,7 @@ func TestLexer(t *testing.T) {
 				{item{typ: itemSemiColon, val: dontcare}, true},
 				{item{typ: itemPropertyIdent, val: []byte("A")}, false},
 				{item{typ: itemOpenBracket, val: dontcare}, true},
-				{item{typ: itemError, val: []byte("unexpected EOF")}, false},
+				{item{typ: itemError, val: []byte("lex: unexpected EOF; expected PropertyValue")}, false},
 			},
 		},
 		{
@@ -275,4 +276,20 @@ func TestLexer(t *testing.T) {
 		l := lex(pair.name, []byte(pair.sgf))
 		checkLexerOutput(t, pair.exp, l)
 	}
+}
+
+func TestParser(t *testing.T) {
+	data, err := ioutil.ReadFile("./test-file-1.sgf")
+	if err != nil {
+		t.Errorf("problem reading file: %s", err)
+	}
+	// data := []byte("(;A[a]X[x];;B[b][g](;C[c];D[d])(;Y[y];Z[z]))(;E[e];F[f])")
+	gt, warn, err := Parse(data)
+	if err != nil {
+		t.Errorf("problem parsing: %s", err)
+	}
+	fmt.Println(gt)
+	_ = gt
+	_ = warn
+	fmt.Println(gt[0].FindPropertyByIdentity("RU").Simpletext())
 }
