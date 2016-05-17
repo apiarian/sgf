@@ -57,6 +57,74 @@ func (gt *GameTree) FindPropertyByIdentity(identity string) *Property {
 	return nil
 }
 
+func (gt *GameTree) SimpletextForPropertyIdentity(identity string) (string, error) {
+	p := gt.FindPropertyByIdentity(identity)
+	if p == nil {
+		return "", fmt.Errorf("could not find a Property for identity %s", identity)
+	}
+
+	value, err := p.Simpletext()
+	if err != nil {
+		return "", fmt.Errorf("could not read simpletext from Property: %s", err)
+	}
+
+	return value, nil
+}
+
+func (gt *GameTree) BlackPlayerName() (string, error) {
+	name, err := gt.SimpletextForPropertyIdentity("PB")
+	if err != nil {
+		return "", fmt.Errorf("could not find black player name: %s", err)
+	}
+
+	return name, nil
+}
+
+func (gt *GameTree) WhitePlayerName() (string, error) {
+	name, err := gt.SimpletextForPropertyIdentity("PW")
+	if err != nil {
+		return "", fmt.Errorf("could not find black player name: %s", err)
+	}
+
+	return name, nil
+}
+
+func (gt *GameTree) WinnerColor() (string, error) {
+	result, err := gt.SimpletextForPropertyIdentity("RE")
+	if err != nil {
+		return "", fmt.Errorf("could not find result: %s", err)
+	}
+	switch {
+	case strings.HasPrefix(result, "B+"):
+		return "B", nil
+	case strings.HasPrefix(result, "W+"):
+		return "W", nil
+	default:
+		return "?", fmt.Errorf("no clear winner: %s", result)
+	}
+}
+
+func (gt *GameTree) WinnerName() (string, error) {
+	winnerColor, err := gt.WinnerColor()
+	if err != nil && winnerColor != "?" {
+		return "", fmt.Errorf("error getting winner color: %s", err)
+	}
+	var name string
+	switch winnerColor {
+	case "B":
+		name, err = gt.BlackPlayerName()
+	case "W":
+		name, err = gt.WhitePlayerName()
+	case "?":
+	default:
+		return "", fmt.Errorf("unknown winner color: %s", winnerColor)
+	}
+	if name == "" {
+		return "", fmt.Errorf("error getting winner name: %s", err)
+	}
+	return name, nil
+}
+
 type Node struct {
 	Properties []*Property
 }
