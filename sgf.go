@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type GameTree struct {
@@ -123,6 +124,133 @@ func (gt *GameTree) WinnerName() (string, error) {
 		return "", fmt.Errorf("error getting winner name: %s", err)
 	}
 	return name, nil
+}
+
+func (gt *GameTree) Event() (string, error) {
+	event, err := gt.SimpletextForPropertyIdentity("EV")
+	if err != nil {
+		return "", fmt.Errorf("could not find event information: %s", err)
+	}
+
+	return event, nil
+}
+
+type FuzzyDateFuzzyness int
+
+const (
+	FuzzyDateNotFuzzy FuzzyDateFuzzyness = iota
+	FuzzyDateFuzzyDay
+	FuzzyDateFuzzyMonthDay
+)
+
+type FuzzyDate struct {
+	time.Time
+	Fuzzyness FuzzyDateFuzzyness
+}
+
+func NewFuzzyDate(t time.Time, f FuzzyDateFuzzyness) FuzzyDate {
+	return FuzzyDate{t, f}
+}
+
+func (fd FuzzyDate) String() string {
+	var fs string
+	switch fd.Fuzzyness {
+	case FuzzyDateNotFuzzy:
+		fs = "2006-01-02"
+	case FuzzyDateFuzzyDay:
+		fs = "2006-01"
+	case FuzzyDateFuzzyMonthDay:
+		fs = "2006"
+	}
+	return fd.Format(fs)
+}
+
+func (gt *GameTree) Dates() ([]FuzzyDate, error) {
+	dtstring, err := gt.SimpletextForPropertyIdentity("DT")
+	if err != nil {
+		return nil, fmt.Errorf("could not find date information: %s", err)
+	}
+
+	var dates = []FuzzyDate{}
+
+	datestrings := strings.Split(dtstring, ",")
+	datestringTypes := make([]string, len(datestrings))
+
+	for i, datestring := range datestrings {
+		dateparts := strings.Split(datestring, "-")
+
+		partcount := len(dateparts)
+		if partcount == 0 || partcount > 3 {
+			return dates, fmt.Errorf("malformed date: %s", datestring)
+		}
+
+		probablyStartsWithYear := len(dateparts[0]) == 4
+		if i == 0 && !probablyStartsWithYear {
+			return dates, fmt.Errorf("the first date must include a year")
+		}
+
+		var t string
+		switch partcount {
+		case 3:
+			t = "ymd"
+		case 2:
+			if probablyStartsWithYear {
+				t = "ym"
+			} else {
+				t = "md"
+			}
+		case 1:
+			if probablyStartsWithYear {
+				t = "y"
+			} else {
+				switch datestringTypes[i-1] {
+				case "ym", "m":
+					t = "m"
+				case "ymd", "md", "d":
+					t = "d"
+				default:
+					return dates, fmt.Errorf("invalid date string: %s", dtstring)
+				}
+			}
+		}
+		datestringTypes[i] = t
+
+		var f FuzzyDateFuzzyness
+		switch t {
+		case "ymd":
+			f = FuzzyDateNotFuzzy
+		case "ym":
+			datestring = datestring + "-01"
+			f = FuzzyDateFuzzyDay
+		case "y":
+			datestring = datestring + "-01-01"
+			f = FuzzyDateFuzzyMonthDay
+		case "md":
+			datestring = fmt.Sprintf("%04d-%s", dates[i-1].Year(), datestring)
+			f = FuzzyDateNotFuzzy
+		case "m":
+			datestring = fmt.Sprintf("%04d-%s-01", dates[i-1].Year(), datestring)
+			f = FuzzyDateFuzzyDay
+		case "d":
+			datestring = fmt.Sprintf("%04d-%02d-%s", dates[i-1].Year(), dates[i-1].Month(), datestring)
+			f = FuzzyDateNotFuzzy
+		}
+
+		d, err := time.Parse("2006-01-02", datestring)
+		if err != nil {
+			return dates, fmt.Errorf("error parsing date %s: %s", datestring, err)
+		}
+		dates = append(dates, NewFuzzyDate(d, f))
+	}
+	return dates, nil
+}
+
+func (gt *GameTree) StartDate() (FuzzyDate, error) {
+	dates, err := gt.Dates()
+	if len(dates) < 1 {
+		return FuzzyDate{}, err
+	}
+	return dates[0], err
 }
 
 type Node struct {
